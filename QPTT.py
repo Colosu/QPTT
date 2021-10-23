@@ -3,12 +3,12 @@
 
 import numpy as np
 import scipy.stats as st
+import matplotlib.pyplot as plt
 
 # Importing standard Qiskit libraries
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, transpile, Aer, IBMQ, execute
 from qiskit.tools.jupyter import *
 from qiskit.visualization import *
-#from ibm_quantum_widgets import *
 from qiskit.providers.aer import QasmSimulator
 from qiskit.tools.visualization import plot_histogram
 
@@ -22,6 +22,21 @@ def qc1():
     qc.h(output_qubit)
     qc.cswap(output_qubit, input_qubit[0], input_qubit[1])
     qc.h(output_qubit)
+    qc.x(output_qubit)
+    qc.measure(output_qubit, c)
+    
+    return qc
+
+def qc1_fail():
+    
+    input_qubit = QuantumRegister(2, 'input_qubit')
+    output_qubit = QuantumRegister(1, 'output_qubit')
+    c = ClassicalRegister(1, 'c')
+    qc = QuantumCircuit(input_qubit, output_qubit, c)
+    # Implementation statements
+    qc.h(output_qubit)
+    qc.cswap(output_qubit, input_qubit[0], input_qubit[1])
+    qc.x(output_qubit)
     qc.x(output_qubit)
     qc.measure(output_qubit, c)
     
@@ -135,7 +150,7 @@ def oracle_union(oracles):
                 oracle[k] = v
         iters += 1
     for key, value in oracle.items():
-        oracle[key] = int(oracle[key]/iters) 
+        oracle[key] /= iters 
     return oracle
 
 #Función chi_square
@@ -146,8 +161,7 @@ def chi_square(outputs,oracle):
         alpha = 0.05
         outputs = [outputs[key] for key in sorted(outputs.keys())]
         oracle = [oracle[key] for key in sorted(oracle.keys())]
-        #outputs = outputs/np.sum(outputs)
-        #oracle = oracle/np.sum(oracle)
+        oracle = np.multiply(oracle,np.sum(outputs)).astype(int)
         stat, pvalue = st.chisquare(outputs,oracle)
         #print("H-value: " + str(stat))
         #print("p-value: " + str(pvalue))
@@ -169,20 +183,19 @@ def chi_square(outputs,oracle):
 #OUTPUTS: void
 def QPTT(qc, num_inputs, oracles, inputs_array=None, shots=1024):
     
+    all_outputs=dict()
+    oracles_superp=dict()
+    
     if inputs_array != None:
         for inputs,oracle in zip(inputs_array,oracles.values()):
             # Get total number of qubits and classical bits
             num_total_qubits = qc.num_qubits
             num_cl_bits = qc.width() - num_total_qubits
 
-            # Go through the test value array and execute the test
-            #for value in input_array:
-            #    print(value)
-            #    iqc = input_quantum_circuit(value=value, num_total_qubits=num_total_qubits, num_cl_bits=num_cl_bits)
-            #    test_circuit(iqc,qc)
-
             iqc = iqc_individual(value=inputs, num_total_qubits=num_total_qubits, num_cl_bits=num_cl_bits)
             outputs = test_circuit(iqc,qc,shots)
+            input_str = [str(int) for int in inputs]
+            all_outputs["".join(input_str)] = outputs
             result = chi_square(outputs, oracle)
             if result:
                 print(f"Circuit passed evaluation for input {inputs}.")
@@ -191,23 +204,21 @@ def QPTT(qc, num_inputs, oracles, inputs_array=None, shots=1024):
                 print(f"Circuit returned {outputs}")
     else:
         oracle = oracle_union(oracles)
+        oracles_superp = oracle
+        
         # Get total number of qubits and classical bits
         num_total_qubits = qc.num_qubits
         num_cl_bits = qc.width() - num_total_qubits
 
-        # Go through the test value array and execute the test
-        #for value in input_array:
-        #    print(value)
-        #    iqc = input_quantum_circuit(value=value, num_total_qubits=num_total_qubits, num_cl_bits=num_cl_bits)
-        #    test_circuit(iqc,qc)
-
         iqc = iqc_superposition(num_inputs=num_inputs, num_total_qubits=num_total_qubits, num_cl_bits=num_cl_bits)
         outputs = test_circuit(iqc,qc,shots)
+        all_outputs = outputs
+        
         result = chi_square(outputs, oracle)
         if result:
             print(f"Circuit passed evaluation.")
         else:
             print(f"Circuit failed evaluation! There is some error.")
             print(f"Circuit returned {outputs}")
-
-
+            
+    return all_outputs, oracles_superp
